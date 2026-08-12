@@ -1,7 +1,7 @@
 # Jogo da Velha Web - UNIFOR
 
-**Aluno:** SEU NOME AQUI  
-**Matrícula:** SUA MATRICULA AQUI  
+**Aluno:** Daniel Willian, Arthur Cavalcante e Andre  
+**Matrícula:** 2612716, 
 **Disciplina/Projeto:** Desenvolvimento Web - UNIFOR  
 
 ## 🔗 Link da Aplicação

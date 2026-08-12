@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Velha - UNIFOR</title>
+    <!-- Importando script de confetes via CDN (não é salvo localmente, cumpre RNF) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --unifor-blue: #003366; /* Azul Institucional */
+            --unifor-orange: #d97706; /* Laranja Institucional */
+            --bg-color: #f3f4f6;
+            --cell-bg: #ffffff;
+            --text-light: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: var(--unifor-blue);
+        }
+
+        header {
+            background-color: var(--unifor-blue);
+            color: var(--text-light);
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-bottom: 5px solid var(--unifor-orange);
+        }
+
+        header h1 { margin-bottom: 5px; }
+        header p { font-size: 0.9rem; font-weight: 300; }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        select, button {
+            padding: 10px 15px;
+            font-size: 1rem;
+            border: 2px solid var(--unifor-blue);
+            border-radius: 5px;
+            background-color: var(--cell-bg);
+            color: var(--unifor-blue);
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s ease;
+        }
+
+        select:disabled, button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        button:not(:disabled):hover { background-color: var(--unifor-blue); color: var(--text-light); }
+        .reset-btn { background-color: var(--unifor-orange); border-color: var(--unifor-orange); color: white; }
+        .reset-btn:not(:disabled):hover { background-color: #b46204; border-color: #b46204; }
+
+        .scoreboard {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            background-color: var(--unifor-blue);
+            padding: 5px;
+            border-radius: 10px;
+            position: relative;
+        }
+
+        .cell {
+            background-color: var(--cell-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            user-select: none;
+        }
+
+        .cell.x { color: var(--unifor-blue); }
+        .cell.o { color: var(--unifor-orange); }
+        .cell:not(.x):not(.o):not(.win):hover { background-color: #e2e8f0; }
+
+        /* Estilo da linha contínua sobre células vitoriosas */
+        .cell.win { 
+            background-color: var(--unifor-orange); 
+            color: white; 
+        }
+
+        .status { margin-top: 20px; font-size: 1.2rem; font-weight: bold; min-height: 1.6rem;}
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Jogo da Velha</h1>
+        <p>Projeto Web - Universidade de Fortaleza (UNIFOR)</p>
+    </header>
+
+    <div class="controls">
+        <select id="mode">
+            <option value="PVP">Jogador vs Jogador</option>
+            <option value="CPU">Jogador vs CPU</option>
+        </select>
+        <select id="format">
+            <option value="1">Partida Única</option>
+            <option value="3">Melhor de 3 (MD3)</option>
+        </select>
+        <button class="reset-btn" id="resetBtn">Reiniciar Jogo</button>
+    </div>
+
+    <div class="scoreboard">
+        <div>X: <span id="scoreX">0</span></div>
+        <div>Rodada: <span id="roundCounter">1</span></div>
+        <div>O: <span id="scoreO">0</span></div>
+    </div>
+
+    <div class="board" id="board">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+
+    <div class="status" id="statusText">Vez do Jogador X</div>
+
+    <script>
+        // --- Web Audio API (Correção Sonora - Timbres mais agradáveis) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'X') { 
+                // Som curto e agudo para X
+                osc.frequency.setValueAtTime(660, now); // Nota E5
+                osc.type = 'triangle';
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+            else if (type === 'O') { 
+                // Som curto e levemente mais grave para O
+                osc.frequency.setValueAtTime(523.25, now); // Nota C5
+                osc.type = 'triangle';
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+            else if (type === 'win') { 
+                // Som festivo (pequeno arpejo rápido)
+                osc.type = 'square';
+                gainNode.gain.setValueAtTime(0.1, now);
+                osc.frequency.setValueAtTime(880, now); // A5
+                osc.frequency.setValueAtTime(1108.73, now + 0.1); // C#6
+                osc.frequency.setValueAtTime(1318.51, now + 0.2); // E6
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+            else if (type === 'draw') { 
+                // Som grave e 'pesado' para empate
+                osc.frequency.setValueAtTime(110, now); // A2
+                osc.type = 'sawtooth';
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+        }
+
+        // --- Estado da Aplicação e Variáveis de Controle ---
+        let options = ["", "", "", "", "", "", "", "", ""];
+        let currentPlayer = "X";
+        let isRoundActive = true;
+        let isMatchOver = false; // Bloqueia tudo quando acaba o jogo/torneio
+        let isCpuThinking = false; // Bloqueia clique enquanto CPU pensa
+
+        let winsX = 0;
+        let winsO = 0;
+        let currentRound = 1;
+
+        const winConditions = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Linhas
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Colunas
+            [0, 4, 8], [2, 4, 6]             // Diagonais
+        ];
+
+        // --- Elementos do DOM ---
+        const cells = document.querySelectorAll('.cell');
+        const statusText = document.getElementById('statusText');
+        const modeSelect = document.getElementById('mode');
+        const formatSelect = document.getElementById('format');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // --- Inicialização ---
+        function init() {
+            cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+            resetBtn.addEventListener('click', resetFullMatch);
+            modeSelect.addEventListener('change', resetFullMatch);
+            formatSelect.addEventListener('change', resetFullMatch);
+            updateUI();
+        }
+
+        // --- Lógica de Cliques e Jogadas ---
+        function handleCellClick(e) {
+            const index = e.target.getAttribute('data-index');
+            const isCPU = modeSelect.value === 'CPU';
+
+            // Bloqueios: célula cheia, rodada/jogo acabou, ou vez da CPU
+            if (options[index] !== "" || !isRoundActive || isMatchOver || isCpuThinking) return;
+            if (isCPU && currentPlayer === "O") return; 
+
+            makeMove(index);
+        }
+
+        function makeMove(index) {
+            options[index] = currentPlayer;
+            const cell = cells[index];
+            cell.innerText = currentPlayer;
+            cell.classList.add(currentPlayer.toLowerCase());
+            
+            playSound(currentPlayer);
+            
+            checkRoundResult();
+        }
+
+        function checkRoundResult() {
+            let roundWon = false;
+            let winningCells = [];
+
+            for (let i = 0; i < winConditions.length; i++) {
+                const [a, b, c] = winConditions[i];
+                if (options[a] && options[a] === options[b] && options[a] === options[c]) {
+                    roundWon = true;
+                    winningCells = [a, b, c];
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                // Feedback Visual: Linha contínua institucional
+                winningCells.forEach(idx => cells[idx].classList.add('win'));
+                playSound('win');
+                isRoundActive = false;
+                updateScore(currentPlayer);
+                return;
+            }
+
+            // Checar Empate (Velha)
+            if (!options.includes("")) {
+                playSound('draw');
+                statusText.innerText = "Empate (Deu Velha)! Próxima Rodada...";
+                isRoundActive = false;
+                setTimeout(prepareNextRound, 2000);
+                return;
+            }
+
+            // Alternar Turno
+            currentPlayer = currentPlayer === "X" ? "O" : "X";
+            statusText.innerText = `Vez do Jogador ${currentPlayer}`;
+
+            // Lógica CPU (Completa)
+            if (modeSelect.value === 'CPU' && currentPlayer === "O" && isRoundActive) {
+                isCpuThinking = true;
+                statusText.innerText = "CPU pensando...";
+                setTimeout(cpuMove, 400); // Intervalo exigido
+            }
+        }
+
+        function cpuMove() {
+            if (!isRoundActive || isMatchOver) { isCpuThinking = false; return; }
+            
+            // IA Simples: Escolhe aleatoriamente entre as disponíveis
+            let available = options.map((val, idx) => val === "" ? idx : null).filter(val => val !== null);
+            
+            if (available.length > 0) {
+                let randomIdx = available[Math.floor(Math.random() * available.length)];
+                isCpuThinking = false; // Libera antes de jogar para fluidez
+                makeMove(randomIdx);
+            } else {
+                isCpuThinking = false;
+            }
+        }
+
+        // --- Lógica de Placar e MD3 (Completa) ---
+        function updateScore(winner) {
+            if (winner === "X") winsX++; else winsO++;
+            
+            updateUI();
+
+            const format = parseInt(formatSelect.value);
+            const winsNeeded = format === 3 ? 2 : 1; 
+
+            // Checar se a partida INTEIRA acabou (MD3 ou Única)
+            if (winsX === winsNeeded || winsO === winsNeeded) {
+                isMatchOver = true;
+                statusText.innerText = `🏆🏆 JOGADOR ${winner} VENCEU O JOGO! 🏆🏆`;
+                // Feedback visual: Confetes
+                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+                modeSelect.disabled = false;
+                formatSelect.disabled = false;
+            } else {
+                // Continua o torneio
+                statusText.innerText = `Jogador ${winner} venceu a Rodada ${currentRound}!`;
+                setTimeout(prepareNextRound, 2000);
+            }
+        }
+
+        // --- Fluxo de Rodadas e Reinício ---
+        function prepareNextRound() {
+            if (isMatchOver) return;
+            currentRound++;
+            clearBoardUI();
+            isRoundActive = true;
+            currentPlayer = "X"; // X sempre começa
+            statusText.innerText = `Rodada ${currentRound} - Vez do Jogador X`;
+            updateUI();
+        }
+
+        function clearBoardUI() {
+            options = ["", "", "", "", "", "", "", "", ""];
+            cells.forEach(cell => {
+                cell.innerText = "";
+                cell.className = "cell"; // Remove x, o, win
+            });
+        }
+
+        function resetFullMatch() {
+            winsX = 0;
+            winsO = 0;
+            currentRound = 1;
+            isMatchOver = false;
+            isCpuThinking = false;
+            
+            // Habilita controles na nova partida
+            modeSelect.disabled = false;
+            formatSelect.disabled = false;
+
+            clearBoardUI();
+            isRoundActive = true;
+            currentPlayer = "X";
+            statusText.innerText = `Vez do Jogador X`;
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('scoreX').innerText = winsX;
+            document.getElementById('scoreO').innerText = winsO;
+            document.getElementById('roundCounter').innerText = currentRound;
+            
+            // Bloqueia seletores durante a partida
+            if (winsX > 0 || winsO > 0 || currentRound > 1) {
+                modeSelect.disabled = true;
+                formatSelect.disabled = true;
+            }
+        }
+
+        // Iniciar
+        init();
+
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Jogo da Velha Web - UNIFOR
 
-**Aluno:** Daniel Willian, Arthur Cavalcante e Andre  
+**Aluno:** Daniel Willian, Arthur Cavalcante e Andre Comar 
 **Matrícula:** 2612716, 
 **Disciplina/Projeto:** Desenvolvimento Web - UNIFOR  
 
